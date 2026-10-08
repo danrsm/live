@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Live talk</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f6f4; --fg: #1b1c1f; --muted: #6b6e76; --line: #d4d5d9; --accent: #2f6fdb; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111317; --fg: #e9eaee; --muted: #8b8f99; --line: #2c3038; --accent: #6f9cf0; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+    background: var(--bg); color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { width: min(380px, 100%); display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  p { margin: 0; color: var(--muted); }
+  form { display: flex; flex-direction: column; gap: 10px; }
+  input[type=password] { padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px;
+    background: transparent; color: inherit; font: inherit; }
+  button { padding: 10px 12px; border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; cursor: pointer; }
+  label { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 14px; }
+  .error { color: #d04040; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">Live talk</h1>
+  <p id="message">Looking for the talk…</p>
+  <form id="form" hidden>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Password" aria-label="Password" required>
+    <label><input id="remember" type="checkbox"> Remember on this computer</label>
+    <button type="submit">Watch</button>
+  </form>
+</main>
+<script>
+async function openLink(payload, password) {
+  const bytes = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
+  const subtle = crypto.subtle;
+  const base = await subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await subtle.deriveKey(
+    { name: 'PBKDF2', hash: payload.kdf.hash, iterations: payload.kdf.iterations, salt: bytes(payload.kdf.salt) },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  try {
+    const plain = await subtle.decrypt({ name: 'AES-GCM', iv: bytes(payload.iv) }, key, bytes(payload.data));
+    return new TextDecoder().decode(plain);
+  } catch {
+    return null;
+  }
+}
+const STORE = 'showntell-live-password';
+const message = document.getElementById('message');
+const form = document.getElementById('form');
+const input = document.getElementById('password');
+const remember = document.getElementById('remember');
+const recall = () => { try { return localStorage.getItem(STORE); } catch { return null; } };
+const keep = (value) => { try { value ? localStorage.setItem(STORE, value) : localStorage.removeItem(STORE); } catch {} };
+let shown = null;
+
+async function current() {
+  const response = await fetch('live.json?t=' + Date.now(), { cache: 'no-store' });
+  if (!response.ok) throw new Error('HTTP ' + response.status);
+  return response.json();
+}
+
+async function tryPassword(payload, password, typed) {
+  const url = await openLink(payload, password);
+  if (url) {
+    if (typed) keep(remember.checked ? password : null);
+    location.replace(url);
+    return true;
+  }
+  if (typed) {
+    message.textContent = 'That is not the password for this talk.';
+    message.className = 'error';
+    input.select();
+  }
+  return false;
+}
+
+async function show(payload) {
+  shown = payload.updated;
+  form.hidden = true;
+  message.className = '';
+  if (payload.state === 'open') {
+    message.textContent = 'Joining the talk…';
+    location.replace(payload.url);
+    return;
+  }
+  if (payload.state !== 'locked') {
+    message.textContent = 'No talk is live right now. This page will join it as soon as one starts.';
+    return;
+  }
+  const fromLink = decodeURIComponent(location.hash.slice(1));
+  for (const candidate of [fromLink, recall()]) {
+    if (candidate) {
+      message.textContent = 'Joining the talk…';
+      if (await tryPassword(payload, candidate, false)) return;
+    }
+  }
+  message.textContent = 'This talk has a password.';
+  form.hidden = false;
+  input.focus();
+}
+
+form.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const payload = await current().catch(() => null);
+  if (payload && payload.state === 'locked') await tryPassword(payload, input.value, true);
+  else if (payload) await show(payload);
+});
+remember.checked = Boolean(recall());
+
+async function poll() {
+  try {
+    const payload = await current();
+    if (payload.updated !== shown) await show(payload);
+  } catch (error) {
+    if (shown === null) message.textContent = 'Could not reach the live page (' + error.message + '). Retrying…';
+  }
+  setTimeout(poll, 10000);
+}
+poll();
+</script>
+</body>
+</html>
