@@ -1,13 +1,5 @@
 {
   "v": 1,
-  "state": "locked",
-  "updated": "2026-10-11T08:02:51.824Z",
-  "kdf": {
-    "name": "PBKDF2",
-    "hash": "SHA-256",
-    "iterations": 250000,
-    "salt": "4ba9b37kTQufkXgdVFKNpA=="
-  },
-  "iv": "t05Z+7XppJkhgrwL",
-  "data": "WWdDVgq8kONpbKumQSe3dTzUBPItP5JjBAVNhSliV2SNpRESjX8R1ISw9LnjzXOJ97OrBg2oyqcJinfIOI9+eN66mgqu1RYcqjBgMIv6+a0G0EZIOi4GCHqO9DuPZCd04qi3yFaluOLFvSTMSJMNB/Gn0TjI40vjPucOqzNgJ43zhkLONdBsONeTAhjdA5KH"
+  "state": "off",
+  "updated": "2026-10-11T08:14:37.793Z"
 }
